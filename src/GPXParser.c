@@ -31,6 +31,10 @@ void getTrackData(xmlNode *tmp, Track **myTrack, List **trackSegmentsList, List 
 TrackSegment * parseTrackSegment(xmlNode *r_node);
 void getTrackSegmentData(xmlNode *tmp, TrackSegment **mySegment, List **wptList);
 
+List* getWaypoints(const GPXdoc* doc);
+List* getAllRoutes(const GPXdoc* doc);
+List* getAllTracks(const GPXdoc* doc);
+int numData(List *list, char* type);
 
 /* Function to create an GPX object based on the contents of an GPX file. */
 GPXdoc* createGPXdoc(char* fileName) {
@@ -557,62 +561,6 @@ void deleteGPXdoc(GPXdoc* doc) {
     free(doc);
 }
 
-/* Function that returns a waypoint with the given name.  If more than one exists, return the first one. */
-Waypoint* getWaypoint(const GPXdoc* doc, char* name) {
-    Waypoint *tmpWpt = NULL;
-    NULLCHECK(doc)
-
-    void *elem;
-    ListIterator iter = createIterator(doc->waypoints);
-    while ((elem = nextElement(&iter)) != NULL)
-    {
-        tmpWpt = (Waypoint *)elem;
-        char *name_wpt = tmpWpt->name;
-        if (strcmp(name_wpt, name) == 0) {
-            return tmpWpt;
-        }
-    }
-
-    return NULL;
-}
-/* Function that returns a track with the given name.  If more than one exists, return the first one. */
-Track* getTrack(const GPXdoc* doc, char* name) {
-    Track *tmptrack = NULL;
-    NULLCHECK(doc)
-
-    void *elem;
-    ListIterator iter = createIterator(doc->tracks);
-    while ((elem = nextElement(&iter)) != NULL)
-    {
-        tmptrack = (Track *)elem;
-        char *name_trk = tmptrack->name;
-        if (strcmp(name_trk, name) == 0) {
-            return tmptrack;
-        }
-    }
-
-    return NULL;
-}
-
-/* Function that returns a route with the given name.  If more than one exists, return the first one. */
-Route* getRoute(const GPXdoc* doc, char* name) {
-    Route *tmpRoute = NULL;
-    NULLCHECK(doc)
-
-    void *elem;
-    ListIterator iter = createIterator(doc->routes);
-    while ((elem = nextElement(&iter)) != NULL)
-    {
-        tmpRoute = (Route *)elem;
-        char *name_route = tmpRoute->name;
-        if (strcmp(name_route, name) == 0) {
-            return tmpRoute;
-        }
-    }
-    return NULL;
-}
-
-
 
 /* ******************************* List helper functions  - MUST be implemented *************************** */
 
@@ -867,3 +815,182 @@ char* trackToString(void* data) {
 int compareTracks(const void *first, const void *second) {
     return 0;
 }
+
+/* ***************************** MODULE 2 FUNCTIONS ***************************** */
+
+/* Function that returns a waypoint with the given name.  If more than one exists, return the first one. */
+Waypoint* getWaypoint(const GPXdoc* doc, char* name) {
+    Waypoint *tmpWpt = NULL;
+    NULLCHECK(doc)
+
+    void *elem;
+    ListIterator iter = createIterator(doc->waypoints);
+    while ((elem = nextElement(&iter)) != NULL)
+    {
+        tmpWpt = (Waypoint *)elem;
+        char *name_wpt = tmpWpt->name;
+        if (strcmp(name_wpt, name) == 0) {
+            return tmpWpt;
+        }
+    }
+
+    return NULL;
+}
+/* Function that returns a track with the given name.  If more than one exists, return the first one. */
+Track* getTrack(const GPXdoc* doc, char* name) {
+    Track *tmptrack = NULL;
+    NULLCHECK(doc)
+
+    void *elem;
+    ListIterator iter = createIterator(doc->tracks);
+    while ((elem = nextElement(&iter)) != NULL)
+    {
+        tmptrack = (Track *)elem;
+        char *name_trk = tmptrack->name;
+        if (strcmp(name_trk, name) == 0) {
+            return tmptrack;
+        }
+    }
+
+    return NULL;
+}
+
+
+/* Function that returns a route with the given name.  If more than one exists, return the first one. */
+Route* getRoute(const GPXdoc* doc, char* name) {
+    Route *tmpRoute = NULL;
+    NULLCHECK(doc)
+
+    void *elem;
+    ListIterator iter = createIterator(doc->routes);
+    while ((elem = nextElement(&iter)) != NULL)
+    {
+        tmpRoute = (Route *)elem;
+        char *name_route = tmpRoute->name;
+        if (strcmp(name_route, name) == 0) {
+            return tmpRoute;
+        }
+    }
+    return NULL;
+}
+
+/* Total number of waypoints in the GPX file */
+int getNumWaypoints(const GPXdoc* doc) {
+    if (doc == NULL) return -1;
+    
+    int num = 0;
+    List *waypoints = getWaypoints(doc);
+
+    for(int i = 0; i < getLength(waypoints); i++) {
+        num++;
+    }
+
+    return num;
+}
+
+/* Helper. Get all waypoints */
+List* getWaypoints(const GPXdoc* doc) {
+    NULLCHECK(doc)
+
+    List *list = initializeList(waypointToString,deleteWaypoint,compareWaypoints);
+    Waypoint *wpt;
+    ListIterator wptsss = createIterator(doc->waypoints);
+
+    /*Iterate*/
+    for(int i = 0; i < getLength(doc->waypoints); i++) {
+        wpt = (Waypoint*)nextElement(&wptsss);
+        insertBack(list,wpt);
+    }
+    
+    return list;
+}
+
+/* Helper. Get all routes */
+List* getAllRoutes(const GPXdoc* doc) {
+    NULLCHECK(doc)
+
+    List *list = initializeList(routeToString,deleteRoute,compareRoutes);
+    Route *rte;
+    ListIterator routesss = createIterator(doc->routes);
+
+    /*Iterate*/
+    for(int i = 0; i < getLength(doc->routes); i++) {
+        rte = (Route*)nextElement(&routesss);
+        insertBack(list,rte);
+    }
+    
+    return list;
+}
+
+/* Total number of routes in the GPX file */
+int getNumRoutes(const GPXdoc* doc) {
+    if (doc == NULL) return -1;
+    int num = 0;
+    List *routes = getAllRoutes(doc);
+
+    for(int i = 0; i < getLength(routes); i++) {
+        num++;
+    }
+    return num;
+}
+
+/* Total number of tracks in the GPX file */
+int getNumTracks(const GPXdoc* doc) {
+    if (doc == NULL) return -1;
+    int num = 0;
+    List *tracks = getAllTracks(doc);
+
+    for(int i = 0; i < getLength(tracks); i++) {
+        num++;
+    }
+    return num;
+}
+
+/* Helper. Get all tracks */
+List* getAllTracks(const GPXdoc* doc) {
+    NULLCHECK(doc)
+
+    List *list = initializeList(trackToString,deleteTrack,compareTracks);
+    Track *trck;
+    ListIterator trackss = createIterator(doc->tracks);
+
+    /* Iterate */
+    for(int i = 0; i < getLength(doc->tracks); i++) {
+        trck = (Track*)nextElement(&trackss);
+        insertBack(list,trck);
+    }
+    return list;
+}
+
+
+/* Total number of GPXData elements in the document */
+int getNumGPXData(const GPXdoc* doc) {
+    if (doc ==NULL) return -1;
+    int num =0;
+    num = num + numData(getWaypoints(doc),"waypoint");
+    num = num + numData(getAllTracks(doc),"track");
+    num = num + numData(getAllRoutes(doc),"route");
+
+    return num;
+}
+
+int numData(List *list, char* type) {
+    int num = 0;
+    ListIterator iter = createIterator(list);
+    
+    /*Use the type to determine which length to get*/
+    for(int i = 0; i < getLength(list); i++) {
+        if(strcmp(type,"waypoint") == 0) {
+            Waypoint* wpt = (Waypoint*)nextElement(&iter);
+            num += getLength(wpt->otherData);
+        } else if(strcmp(type,"track") == 0) {
+            Track* trk = (Track*)nextElement(&iter);
+            num += getLength(trk->otherData);
+        } else if(strcmp(type,"route") == 0) {
+            Route* rte = (Route*)nextElement(&iter);
+            num += getLength(rte->otherData);
+        }
+    }
+    return num;
+}
+
