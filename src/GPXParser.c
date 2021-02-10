@@ -155,26 +155,36 @@ void getTrackData(xmlNode *tmp, Track **myTrack, List **trackSegmentsList, List 
         if (tmpNode->type == XML_ELEMENT_NODE) {
 
             char *nodeName = (char *)tmpNode->name;
-            xmlNode *childTemp = tmp->children;
-            char *cont = (char *)(childTemp->content);
 
             if (strcmp(nodeName, "name") == 0) {
+                xmlNode *childTemp = tmpNode->children;
+                char *cont = (char *)(childTemp->content);
+
                 if (cont != NULL) {
                     (*myTrack)->name = malloc(sizeof(char) * (strlen(cont) + 1));
                     strcpy((*myTrack)->name, cont);
                 }
             }
             else if ((strcmp(nodeName, "trkseg") == 0)) {
-                TrackSegment *trackSegment = parseTrackSegment(tmpNode);
+                TrackSegment *trackSegment = NULL;
+                trackSegment = parseTrackSegment(tmpNode);
                 if (trackSegment != NULL) {
                     insertBack((*trackSegmentsList), (void *)trackSegment);
                 }
             }
             else {
+                xmlNode *childTemp = tmpNode->children;
+                char *cont = (char *)(childTemp->content);
+
                 if (cont != NULL) {
-                    GPXData * newData = malloc(sizeof(GPXData) + sizeof(char [strlen(cont)]));
+
+                    int len = sizeof(GPXData) + sizeof(char [strlen(cont)]);
+                    GPXData * newData = malloc(sizeof(char)*len + 1);
+
                     strcpy(newData->name, nodeName);
                     strcpy(newData->value, cont);
+                    strcat(newData->value, "\0");
+                    
                     insertBack((*trackOtherDataList), (void *)newData);
                 }
             }
@@ -261,6 +271,7 @@ Route *parseRoute(xmlNode *r_node) {
 
     return myRte;
 }
+
 /* Helper function to parse route name, waypoints and any other data */
 void getRteData(xmlNode *tmp, Route **myRte, List **wptList, List **routeOtherDataList) {
 
@@ -271,36 +282,35 @@ void getRteData(xmlNode *tmp, Route **myRte, List **wptList, List **routeOtherDa
 
             char *nodeName = (char *)tmpNode->name;
 
-            xmlNode *childTemp = tmpNode->children;
-
-            //char *cont = (char *)(childTemp->content);
-
-            printf("+++++ NAME : -%s-\n", nodeName);
-            //printf("----- name : -%s-\n", childTemp->name);
-            printf("+++++ content: -%s-\n", childTemp->content);
-
             if (strcmp(nodeName, "rtept") == 0) {
-                //CHECK THE PROPERTIES NOT THE CONTENT
                 Waypoint *wpt = NULL;
-                if ((childTemp->content) != NULL) {
-                    wpt = parseWpt(tmpNode);
-                }
+                wpt = parseWpt(tmpNode);
+                
                 if (wpt != NULL) {
                     insertBack((*wptList), (void *)wpt);
                 }
             }
             else if (strcmp(nodeName, "name") == 0) {
-                if ((childTemp->content) != NULL) {
+                if ((tmpNode->children->content) != NULL) {
+
+                    xmlNode *childTemp = tmpNode->children;
                     (*myRte)->name = malloc(sizeof(char) * (strlen((char *)(childTemp->content)) + 1));
                     strcpy((*myRte)->name, (char *)(childTemp->content));
                 }
             }
             else {
-                if ((childTemp->content) != NULL) {
-                    GPXData * newData = malloc(sizeof(GPXData) + sizeof(char [strlen((char *)(childTemp->content))]));
+                if ((tmpNode->children->content) != NULL) {
+
+                    xmlNode *childTemp = tmpNode->children;
+                    char *cont = (char *)(childTemp->content);
+
+                    int len = sizeof(GPXData) + sizeof(char [strlen(cont)]);
+                    GPXData * newData = malloc(sizeof(char)*len + 1);
+
                     strcpy(newData->name, nodeName);
-                    //printf("********node: -%s- content: -%s-\n", nodeName, cont);
-                    strcpy(newData->value, (char *)(childTemp->content));
+                    strcpy(newData->value, cont);
+                    strcat(newData->value, "\0");
+
                     insertBack((*routeOtherDataList), (void *)newData);
                 }
             }
@@ -460,10 +470,8 @@ char* GPXdocToString(GPXdoc* doc) {
     }
 
     /* Find length of everything before malloc */
-    size += strlen("Namespace: %s");
+    size += strlen("Namespace: %s\nVersion: %f");
     size += strlen(doc->namespace);
-
-    size += strlen("\nVersion: %lf");
     size += sizeof(double) * 1;
 
     if(strcmp(doc->creator,"") != 0) { 
@@ -472,6 +480,7 @@ char* GPXdocToString(GPXdoc* doc) {
     }
 
     if(getLength(doc->waypoints) > 0) {
+        size += strlen("\n\nWaypoints: ");
         temp = toString(doc->waypoints);
         size += strlen(temp);
         free(temp);
@@ -492,10 +501,8 @@ char* GPXdocToString(GPXdoc* doc) {
     description = malloc(sizeof(char)*(size + 1));
 
     /*Copy everything in*/
-    sprintf(description,"Namespace: %s", doc->namespace);
-    //strcat(description,(doc->namespace));
+    sprintf(description,"Namespace: %s\nVersion: %f", doc->namespace, doc->version);
 
-    sprintf(description,"\nVersion: %lf", doc->version);
 
     if(strcmp(doc->creator,"") != 0)  {
         strcat(description,"\nCreator: ");
@@ -503,6 +510,7 @@ char* GPXdocToString(GPXdoc* doc) {
     }
 
     if(getLength(doc->waypoints) > 0) {
+        strcat(description,"\n\nWaypoints: ");
         temp = toString(doc->waypoints);
         strcat(description,temp);
         free(temp);
@@ -661,7 +669,7 @@ void deleteWaypoint(void* data) {
     free(temp_wpt);
 }
 
-char* waypointToString( void* data){
+char* waypointToString( void* data) {
     int len = 0;                                   
     char *myWptString;
     char *temp;
