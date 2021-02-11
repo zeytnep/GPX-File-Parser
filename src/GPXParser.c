@@ -4,7 +4,7 @@
 * Student Number : 1047085
 * Email : zerdogru@uoguelph.ca
 */
-
+//valgrind --leak-check=full  --show-leak-kinds=all  --track-origins=yes --verbose
 #include "../include/GPXParser.h"
 #include "../include/LinkedListAPI.h"
 #include <ctype.h>
@@ -13,7 +13,7 @@
 #define NULLCHECK(ptr) if(ptr==NULL){return NULL;}
 
 /* function declarations */
-void createStruct(xmlNode *a_node, GPXdoc **thedoc, List **waypointList, List **routeList, List **trackSegmentList, List **trackList);
+void createStruct(xmlNode *a_node, GPXdoc **thedoc, List **waypointList, List **routeList, List **trackList);
 xmlNode *readFile(char* fileName, xmlDoc **doc);
 void initGPXattributes(xmlNode *cur_node, GPXdoc **thedoc);
 void getMyNamespace(xmlNode *a_node, GPXdoc **thedoc);
@@ -36,36 +36,42 @@ List* getAllRoutes(const GPXdoc* doc);
 List* getAllTracks(const GPXdoc* doc);
 int numData(List *list, char* type);
 
+int makeSureFileName( char* fileName );
+
 /* Function to create an GPX object based on the contents of an GPX file. */
 GPXdoc* createGPXdoc(char* fileName) {
-    GPXdoc *theGPX = NULL;
 
     xmlDoc *doc = NULL;
     xmlNode *root = NULL;
 
-    NULLCHECK(fileName)
     root = readFile(fileName, &doc);
     if (root == NULL) {
         if (doc != NULL) xmlFreeDoc(doc);
         return NULL;
     }
 
-    theGPX = (GPXdoc *)malloc(sizeof(GPXdoc));
+    GPXdoc *theGPX = (GPXdoc *)malloc(sizeof(GPXdoc));
 
     List *waypointList = initializeList(&waypointToString, &deleteWaypoint, &compareWaypoints);
     List *routeList = initializeList(&routeToString, &deleteRoute, &compareRoutes);
-    List *trackSegmentList = initializeList(&trackSegmentToString, &deleteTrackSegment, &compareTrackSegments);
     List *trackList = initializeList(&trackToString, &deleteTrack, &compareTracks);
     
-    theGPX->version = 0.0;
-    createStruct(root, &theGPX, &waypointList, &routeList, &trackSegmentList, &trackList);
+    createStruct(root, &theGPX, &waypointList, &routeList, &trackList);
+
+    if(strcmp(theGPX->namespace,"") == 0) {
+        deleteGPXdoc(theGPX);
+        xmlFreeDoc(doc);
+        xmlCleanupParser();
+        return NULL;
+    }   
 
     xmlFreeDoc(doc);
+    xmlCleanupParser();
     return theGPX;
 }
 
 /* Recursive function to fill the structs */
-void createStruct(xmlNode *a_node, GPXdoc **thedoc, List **waypointList, List **routeList, List **trackSegmentList, List **trackList) {
+void createStruct(xmlNode *a_node, GPXdoc **thedoc, List **waypointList, List **routeList, List **trackList) {
     xmlNode *cur_node = NULL;
     for (cur_node = a_node; cur_node != NULL; cur_node = cur_node->next) {
        
@@ -101,7 +107,7 @@ void createStruct(xmlNode *a_node, GPXdoc **thedoc, List **waypointList, List **
         (*thedoc)->routes = (*routeList);
 
         /* Recurse */
-        createStruct(cur_node->children, thedoc, waypointList, routeList, trackSegmentList, trackList);
+        createStruct(cur_node->children, thedoc, waypointList, routeList, trackList);
     }
 }
 
@@ -113,6 +119,9 @@ void getMyNamespace(xmlNode *a_node, GPXdoc **thedoc) {
         if ((myNameSpace = a_node->ns) != NULL) {
             strncpy((*thedoc)->namespace, (char *)myNameSpace->href, 255);
             (*thedoc)->namespace[255] = '\0';
+        } else {
+            /*If there is no namespace, cause error*/
+            strcpy((*thedoc)->namespace,"");
         }
     }
 }
@@ -125,9 +134,7 @@ Track *parseTrack(xmlNode *r_node) {
     NULLCHECK(myTrack)
 
     /* Everything must be initialized */
-    myTrack->name = malloc(sizeof(char) * (strlen("") + 1));
-    strcpy(myTrack->name, "");
-
+    myTrack->name = "";
     List *trackSegmentsList = initializeList(&trackSegmentToString, &deleteTrackSegment, &compareTrackSegments);
     List *trackOtherDataList = initializeList(&gpxDataToString, &deleteGpxData, &compareGpxData);
 
@@ -182,8 +189,7 @@ void getTrackData(xmlNode *tmp, Track **myTrack, List **trackSegmentsList, List 
 
                 if (cont != NULL) {
 
-                    int len = sizeof(GPXData) + sizeof(char [strlen(cont)]);
-                    GPXData * newData = malloc(sizeof(char)*len + 1);
+                    GPXData * newData = malloc(sizeof(GPXData) +255);
 
                     strcpy(newData->name, nodeName);
                     strcpy(newData->value, cont);
@@ -200,8 +206,7 @@ void getTrackData(xmlNode *tmp, Track **myTrack, List **trackSegmentsList, List 
 TrackSegment * parseTrackSegment(xmlNode *r_node) {
 
     NULLCHECK(r_node)
-    TrackSegment *mySegment= (TrackSegment *)malloc(sizeof(TrackSegment));
-
+    TrackSegment *mySegment = malloc(sizeof(TrackSegment));
     NULLCHECK(mySegment)
 
     /* Everything must be initialized */
@@ -251,11 +256,9 @@ Route *parseRoute(xmlNode *r_node) {
     NULLCHECK(myRte)
 
     /* Everything must be initialized */
+    myRte->name = "";
     List *wptList = initializeList(&waypointToString, &deleteWaypoint, &compareWaypoints);
     List *routeOtherDataList = initializeList(&gpxDataToString, &deleteGpxData, &compareGpxData);
-
-    myRte->name = malloc(sizeof(char) * (strlen("") + 1));
-    strcpy(myRte->name, "");
 
     if (r_node->children == NULL) { 
         /* If rte doesn't have a child node */
@@ -308,8 +311,7 @@ void getRteData(xmlNode *tmp, Route **myRte, List **wptList, List **routeOtherDa
                     xmlNode *childTemp = tmpNode->children;
                     char *cont = (char *)(childTemp->content);
 
-                    int len = sizeof(GPXData) + sizeof(char [strlen(cont)]);
-                    GPXData * newData = malloc(sizeof(char)*len + 1);
+                    GPXData * newData = malloc(sizeof(GPXData) + 255);
 
                     strcpy(newData->name, nodeName);
                     strcpy(newData->value, cont);
@@ -326,20 +328,16 @@ void getRteData(xmlNode *tmp, Route **myRte, List **wptList, List **routeOtherDa
 Waypoint *parseWpt(xmlNode *r_node) {
 
     NULLCHECK(r_node)
-    xmlNode *myNode = r_node;
-
-    Waypoint *myWpt = (Waypoint *)malloc(sizeof(Waypoint));
+    Waypoint *myWpt = NULL;
+    myWpt = (Waypoint *)malloc(sizeof(Waypoint));
     NULLCHECK(myWpt)
 
-    /* Everything must be initialized */
-    myWpt->longitude = 0.0; 
-    myWpt->latitude = 0.0;
+    myWpt->name = "";
 
-    myWpt->name = malloc(sizeof(char) * (strlen("") + 1));
-    strcpy(myWpt->name, "");
+    xmlNode *myNode = r_node;
 
     List *wptOtherDataList = initializeList(&gpxDataToString, &deleteGpxData, &compareGpxData);
-
+ 
     /* Get waypoint attributes and data */
     getWptAttributes(myNode, &myWpt);
 
@@ -396,14 +394,16 @@ void getWptData(xmlNode *tmp, Waypoint **myWpt, List **waypointDataList) {
             if (strcmp(nodeName, "name") == 0) {
                 char *cont = (char *)(childTemp->content);
                 if (cont != NULL) {
-                    (*myWpt)->name = malloc(sizeof(char) * (strlen(cont) + 1));
+                    (*myWpt)->name = malloc(sizeof(char)* (strlen(cont) + 1));
                     strcpy((*myWpt)->name, cont);
                 }
             }
             else {
                 char *cont = (char *)(childTemp->content);
                 if (cont != NULL) {
-                    GPXData * newData = malloc(sizeof(GPXData) + sizeof(char [strlen(cont)]));
+
+                    GPXData * newData = malloc(sizeof(GPXData) + 255);
+
                     strcpy(newData->name, nodeName);
                     strcpy(newData->value, cont);
                     insertBack((*waypointDataList), (void *)newData);
@@ -446,26 +446,41 @@ xmlNode *readFile(char* fileName, xmlDoc **doc) {
 
     //parse the file and get the DOM 
     *doc = xmlReadFile(fileName, NULL, 0);
+    if((*doc) == NULL) {
+        xmlFreeDoc(*doc);
+        xmlCleanupParser();
+        return NULL;
+    }
 
-    if (fileName == NULL) {
-        printf("ERROR: file name is NULL \n");
-        return EXIT_SUCCESS;
+    if(makeSureFileName(fileName) == -1) { 
+        free(fileName);
+        return NULL;
     }
 
     /* parse the file */
     root = xmlDocGetRootElement(*doc);
-
-
-    /* If an error occured, and NULL is returned. */
-    NULLCHECK(doc)
-    xmlCleanupParser();
-
+    if(root == NULL) {
+        xmlFreeDoc(*doc);
+        xmlCleanupParser();
+        return NULL;
+    }
     return root;
+}
+
+int makeSureFileName( char* fileName ) {
+
+    if (fileName == NULL) {
+        return -1;
+    } else if (strcmp(fileName,"") == 0) {
+        return -1;
+    } 
+    if(strstr(fileName, ".gpx") != NULL) return 0;
+    return -1;
 }
 
 /* Function to create a string representation of an GPX object. */
 char* GPXdocToString(GPXdoc* doc) {
-    char* description ="";
+    char* description;
     char* temp;
     int size = 0;
 
@@ -474,7 +489,7 @@ char* GPXdocToString(GPXdoc* doc) {
     }
 
     /* Find length of everything before malloc */
-    size += strlen("Namespace: %s\nVersion: %f");
+    size += strlen("Namespace: %s,\nVersion: %f");
     size += strlen(doc->namespace);
     size += sizeof(double) * 1;
 
@@ -502,11 +517,10 @@ char* GPXdocToString(GPXdoc* doc) {
         free(temp);
     }
 
-    description = malloc(sizeof(char)*(size + 1));
+    description = malloc(sizeof(char)*size + 1);
 
     /*Copy everything in*/
-    sprintf(description,"Namespace: %s\nVersion: %f", doc->namespace, doc->version);
-
+    sprintf(description,"Namespace: %s,\nVersion: %f", doc->namespace, doc->version);
 
     if(strcmp(doc->creator,"") != 0)  {
         strcat(description,"\nCreator: ");
@@ -572,9 +586,6 @@ void deleteGpxData(void* data) {
         return;
     }
     temp = (GPXData *)data;
-
-    free(temp->name);
-    free(temp->value);
     free(temp);
 }
 
@@ -612,6 +623,10 @@ void deleteWaypoint(void* data) {
     Waypoint *temp_wpt = (Waypoint *)data;
     temp_wpt->latitude = 0.0;
     temp_wpt->longitude = 0.0;
+
+    if((temp_wpt->name != NULL)&& strcmp(temp_wpt->name, "") != 0 ) {
+        free(temp_wpt->name);
+    }
 
     freeList(temp_wpt->otherData);
     free(temp_wpt);
@@ -657,12 +672,13 @@ int compareWaypoints(const void *first, const void *second) {
 
 /* Route helper functions */
 void deleteRoute(void* data) {
-    if (data == NULL) {
-        return;
-    }
+    if (data == NULL) return;
 
     Route *temp_route = (Route *)data;
-    free(temp_route->name);
+    
+    if((temp_route->name != NULL) && strcmp(temp_route->name, "") != 0 ) {
+        free(temp_route->name);
+    }
     freeList(temp_route->waypoints);
     freeList(temp_route->otherData);
 
@@ -715,11 +731,9 @@ int compareRoutes(const void *first, const void *second) {
 
 /* TrackSegment helper functions */
 void deleteTrackSegment(void* data) {
-    TrackSegment *temp_trackseg;
-    if (data == NULL) {
-        return;
-    }
-    temp_trackseg = (TrackSegment *)data;
+    if (data == NULL) return;
+
+    TrackSegment *temp_trackseg = (TrackSegment *)data;
 
     freeList(temp_trackseg->waypoints);
     free(temp_trackseg);
@@ -763,7 +777,10 @@ void deleteTrack(void* data) {
     }
     temp_track = (Track *)data;
 
-    free(temp_track->name);
+    if((temp_track->name != NULL)&& strcmp(temp_track->name, "") != 0 ) {
+        free(temp_track->name);
+    }
+
     freeList(temp_track->segments);
     freeList(temp_track->otherData);
 
@@ -994,3 +1011,6 @@ int numData(List *list, char* type) {
     return num;
 }
 
+int getNumSegments(const GPXdoc* doc) {
+    return 0;
+}
