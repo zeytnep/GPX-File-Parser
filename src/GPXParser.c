@@ -41,7 +41,6 @@ int numData(List *list, char* type);
 
 /* A2 Helper function declarations */
 int validateTree(xmlDoc *the_doc, char *gpxSchemaFile);
-int checkGpxSchemaFile( char* fileName );
 void freeMyList(List *list);
 
 int validateOtherData(List *list);
@@ -50,6 +49,7 @@ int validateRoutes(List *list);
 int validateTracks(List *list);
 int validateTrackSegments(List *list);
 int checkRestrictions(GPXdoc* doc);
+int checkDoc(xmlDoc *doc, char* schemaFile);
 xmlDoc *GPXtoXMLdoc(GPXdoc* doc);
 
 int setRootElementNodes(GPXdoc *doc, xmlNode *root_node);
@@ -609,8 +609,8 @@ void deleteGPXdoc(GPXdoc* doc) {
        File represented by this name must exist and must be readable.
  *@post Either:
         A valid GPXdoc has been created and its address was returned
-        or 
-        An error occurred, and NULL was returned
+		or 
+		An error occurred, and NULL was returned
  *@return the pinter to the new struct or NULL
  *@param gpxSchemaFile - the name of a schema file
  *@param fileName - a string containing the name of the GPX file
@@ -643,26 +643,53 @@ GPXdoc* createValidGPXdoc(char* fileName, char* gpxSchemaFile) {
 
 bool validateGPXDoc(GPXdoc* doc, char* gpxSchemaFile) 
 {
-
     if (doc == NULL) return false;
 
     // check Restrictions
     int areYouValid = checkRestrictions(doc);
     if (areYouValid == -1) return false;
 
-    xmlDoc *isDocValid = GPXtoXMLdoc(doc);
-    if (isDocValid == NULL) return false;
+    xmlDoc *xmllldoc = GPXtoXMLdoc(doc);
+    if (xmllldoc == NULL) return false;
     
-    int i = validateTree(isDocValid, gpxSchemaFile);
-    int z = checkRestrictions(doc);
-
-    if ((i == 0) && (z == 0)) 
-    {
-        return true;
+    if(checkDoc(xmllldoc,gpxSchemaFile) != 0) {
+        return false;
     }
-  
-    return false;
+ 
+    return true;
 } 
+
+int checkDoc(xmlDoc *doc, char* schemaFile) {
+    int ret = 0;
+    xmlSchemaValidCtxtPtr ctxt = NULL;
+    xmlSchemaParserCtxtPtr parser = NULL;
+    xmlSchemaPtr schema = NULL;
+
+    xmlLineNumbersDefault(1);
+    /*Set up schema*/
+    parser = xmlSchemaNewParserCtxt(schemaFile);
+    schema = xmlSchemaParse(parser);
+    xmlSchemaFreeParserCtxt(parser);
+    if(schema == NULL) {
+        xmlSchemaFree(schema);
+        xmlFreeDoc(doc);
+        xmlSchemaCleanupTypes();
+        xmlMemoryDump();
+        return -1;
+    }
+
+    ctxt = xmlSchemaNewValidCtxt(schema);
+    ret = xmlSchemaValidateDoc(ctxt, doc);
+
+    /*Cleanup*/
+    xmlSchemaFreeValidCtxt(ctxt);
+    xmlSchemaFree(schema);
+    xmlFreeDoc(doc);
+    xmlSchemaCleanupTypes();
+    xmlMemoryDump();
+    
+    return ret;
+}
 
 
 bool writeGPXdoc(GPXdoc*doc, char*fileName) {
@@ -688,26 +715,26 @@ xmlDoc *GPXtoXMLdoc(GPXdoc* doc)
 {
 
     if (doc == NULL) return NULL;
+    char buffer[258];
 
     xmlDoc *new_doc = xmlNewDoc(BAD_CAST"1.0");
     if (new_doc == NULL) return NULL;
 
     xmlNode *root = xmlNewNode(NULL, BAD_CAST "gpx"); //Creates the root node.
 
-    xmlNsPtr ns =  xmlNewNs(root, (xmlChar*)doc->namespace, NULL);
-    xmlDocSetRootElement(new_doc,root);
-    xmlSetNs(root,ns);
+    sprintf(buffer, "%1f", doc->version);
+    xmlNewProp(root, (xmlChar *)"version", BAD_CAST "1.1");
+    buffer[0] = '\0';
 
-    char buffer[506];
 
     if (doc->creator != NULL)
     {
         xmlNewProp(root, (xmlChar *)"creator", (xmlChar *)doc->creator);
     }
 
-    sprintf(buffer, "%1f", doc->version);
-    xmlNewProp(root, (xmlChar *)"version", (xmlChar *)buffer);
-    buffer[0] = '\0';
+    xmlNsPtr ns =  xmlNewNs(root, (xmlChar*)doc->namespace, NULL);
+    xmlDocSetRootElement(new_doc,root);
+    xmlSetNs(root,ns);
 
 
     setWaypointNodes(doc->waypoints, root, "wpt");
@@ -996,21 +1023,21 @@ void freeMyList(List *list)
     if (list->head == NULL && list->tail == NULL)
     {
         free(list);
-        return;
-    }
+		return;
+	}
 
     while (list->head != NULL)
     {
-        tmp = list->head;
-        list->head = list->head->next;
-        free(tmp);
-    }
+		tmp = list->head;
+		list->head = list->head->next;
+		free(tmp);
+	}
 
     list->head = NULL;
-    list->tail = NULL;
-    list->length = 0;
+	list->tail = NULL;
+	list->length = 0;
     free(list);
-    return; 
+    return;	
 }
 
 
@@ -1070,22 +1097,13 @@ int validateTree(xmlDoc *the_doc, char *gpxSchemaFile) {
     xmlFreeDoc(doc);
     xmlCleanupParser();
     xmlMemoryDump();
-
+    
+    //returns 0 if valid
     return ret;
 }
 
 
 
-int checkGpxSchemaFile( char* fileName ) {
-    /*Make sure filename exists and is not null*/
-    if(fileName == NULL) return -1;
-        
-    else if(strcmp(fileName,"") == 0) return -1;
-    
-    if(strstr(fileName, ".xsd") != NULL) return 0;
-
-    return -1;
-}
 
 //module 2 functions
 
@@ -1134,7 +1152,7 @@ float CalcDistance(Waypoint * num1, Waypoint * num2) {
     double c = 2 *atan2(sqrt(a), sqrt(1-a));
     double d = 6371e3*c;
  
-    return d; // Return our calculated distance
+	return d; // Return our calculated distance
 }
 
 
